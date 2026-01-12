@@ -68,6 +68,16 @@ class Task extends Model
         return $this->hasMany(Task::class, 'parent_task_id');
     }
 
+    public function comments(): HasMany
+    {
+        return $this->hasMany(TaskComment::class);
+    }
+
+    public function files(): HasMany
+    {
+        return $this->hasMany(TaskFile::class);
+    }
+
     public function isRecurring(): bool
     {
         return $this->recurrence_rule !== null;

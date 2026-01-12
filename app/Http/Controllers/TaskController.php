@@ -8,6 +8,7 @@ use App\Http\Requests\Task\ReorderTasksRequest;
 use App\Http\Requests\Task\StoreTaskRequest;
 use App\Http\Requests\Task\UpdateTaskRequest;
 use App\Http\Resources\TaskResource;
+use App\Models\Client;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\Team;
@@ -194,6 +195,66 @@ class TaskController extends Controller
         return response()->json([
             'message' => 'Task created successfully.',
             'task' => new TaskResource($task),
+        ], 201);
+    }
+
+    public function clientTasks(Request $request, Client $client): AnonymousResourceCollection
+    {
+        $team = $client->team;
+        $this->authorize('view', $team);
+
+        $query = Task::whereHas('project', function ($q) use ($client) {
+            $q->where('client_id', $client->id);
+        })->with(['project', 'assignee', 'creator']);
+
+        $this->applyFilters($query, $request);
+        $this->applySorting($query, $request);
+
+        return TaskResource::collection($query->get());
+    }
+
+    public function storeClientTask(Request $request, Client $client): JsonResponse
+    {
+        $team = $client->team;
+        $this->authorize('view', $team);
+
+        $role = $team->getMemberRole($request->user());
+        if (!$role?->canCreateTasks()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'project_id' => ['required', 'exists:projects,id'],
+            'status' => ['nullable', 'string', 'in:todo,in_progress,review,done'],
+            'priority' => ['nullable', 'string', 'in:low,medium,high,urgent'],
+            'due_date' => ['nullable', 'date'],
+            'progress' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'assigned_to' => ['nullable', 'exists:users,id'],
+        ]);
+
+        $project = $client->projects()->findOrFail($validated['project_id']);
+
+        $task = Task::create([
+            'team_id' => $team->id,
+            'project_id' => $project->id,
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'status' => $validated['status'] ?? 'todo',
+            'priority' => $validated['priority'] ?? 'medium',
+            'due_date' => $validated['due_date'] ?? null,
+            'progress' => $validated['progress'] ?? 0,
+            'assigned_to' => $validated['assigned_to'] ?? null,
+            'created_by' => $request->user()->id,
+            'position' => Task::where('project_id', $project->id)->max('position') + 1,
+        ]);
+
+        $task->load(['project', 'assignee', 'creator']);
+
+        return response()->json([
+            'message' => 'Task created successfully.',
+            'data' => new TaskResource($task),
         ], 201);
     }
 

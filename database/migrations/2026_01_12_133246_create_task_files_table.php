@@ -11,18 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('clients', function (Blueprint $table) {
+        Schema::create('task_files', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('team_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('task_id')->constrained()->cascadeOnDelete();
             $table->string('name');
-            $table->string('email')->nullable();
-            $table->string('phone')->nullable();
-            $table->string('company')->nullable();
-            $table->json('settings')->nullable();
+            $table->string('path');
+            $table->unsignedBigInteger('size');
+            $table->string('mime_type');
+            $table->string('uploaded_by_type');
+            $table->unsignedBigInteger('uploaded_by_id');
             $table->timestamps();
-            $table->softDeletes();
 
-            $table->index('team_id');
+            $table->index('task_id');
         });
     }
 
@@ -31,6 +31,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('clients');
+        Schema::dropIfExists('task_files');
     }
 };

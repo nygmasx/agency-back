@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('tasks', function (Blueprint $table) {
@@ -19,26 +16,23 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->foreignId('assigned_to')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();
-            $table->string('status')->default('todo');
-            $table->string('priority')->default('medium');
-            $table->unsignedTinyInteger('progress')->default(0);
+            $table->string('status')->default('todo'); // todo, in_progress, review, done
+            $table->string('priority')->default('medium'); // low, medium, high, urgent
+            $table->integer('progress')->default(0);
             $table->date('due_date')->nullable();
             $table->string('recurrence_rule')->nullable();
-            $table->foreignId('parent_task_id')->nullable()->constrained('tasks')->cascadeOnDelete();
-            $table->unsignedInteger('position')->default(0);
+            $table->foreignId('parent_task_id')->nullable()->constrained('tasks')->nullOnDelete();
+            $table->integer('position')->default(0);
             $table->timestamps();
             $table->softDeletes();
 
             $table->index(['team_id', 'status']);
-            $table->index(['team_id', 'assigned_to']);
-            $table->index(['team_id', 'due_date']);
             $table->index(['project_id', 'status']);
+            $table->index('assigned_to');
+            $table->index('due_date');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('tasks');

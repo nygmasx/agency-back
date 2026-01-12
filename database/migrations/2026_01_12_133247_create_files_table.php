@@ -11,19 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('client_collaborators', function (Blueprint $table) {
+        Schema::create('files', function (Blueprint $table) {
             $table->id();
             $table->foreignId('client_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('email');
             $table->string('name');
-            $table->string('token')->unique();
-            $table->json('permissions')->nullable();
-            $table->timestamp('expires_at')->nullable();
+            $table->string('path');
+            $table->unsignedBigInteger('size');
+            $table->string('mime_type');
+            $table->string('uploaded_by_type');
+            $table->unsignedBigInteger('uploaded_by_id');
             $table->timestamps();
 
             $table->index('client_id');
-            $table->index('token');
         });
     }
 
@@ -32,6 +31,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('client_collaborators');
+        Schema::dropIfExists('files');
     }
 };

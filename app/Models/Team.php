@@ -17,12 +17,17 @@ class Team extends Model
     protected $fillable = [
         'name',
         'slug',
+        'subdomain',
         'owner_id',
         'settings',
+        'business_type',
+        'client_count',
+        'onboarding_completed',
     ];
 
     protected $casts = [
         'settings' => 'array',
+        'onboarding_completed' => 'boolean',
     ];
 
     protected static function booted(): void
