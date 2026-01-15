@@ -203,9 +203,8 @@ class TaskController extends Controller
         $team = $client->team;
         $this->authorize('view', $team);
 
-        $query = Task::whereHas('project', function ($q) use ($client) {
-            $q->where('client_id', $client->id);
-        })->with(['project', 'assignee', 'creator']);
+        $query = Task::where('client_id', $client->id)
+            ->with(['project', 'assignee', 'creator', 'client']);
 
         $this->applyFilters($query, $request);
         $this->applySorting($query, $request);
@@ -226,7 +225,7 @@ class TaskController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'project_id' => ['required', 'exists:projects,id'],
+            'project_id' => ['nullable', 'exists:projects,id'],
             'status' => ['nullable', 'string', 'in:todo,in_progress,review,done'],
             'priority' => ['nullable', 'string', 'in:low,medium,high,urgent'],
             'due_date' => ['nullable', 'date'],
@@ -234,11 +233,16 @@ class TaskController extends Controller
             'assigned_to' => ['nullable', 'exists:users,id'],
         ]);
 
-        $project = $client->projects()->findOrFail($validated['project_id']);
+        $projectId = null;
+        if (!empty($validated['project_id'])) {
+            $project = $client->projects()->findOrFail($validated['project_id']);
+            $projectId = $project->id;
+        }
 
         $task = Task::create([
             'team_id' => $team->id,
-            'project_id' => $project->id,
+            'project_id' => $projectId,
+            'client_id' => $client->id,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'status' => $validated['status'] ?? 'todo',
@@ -247,10 +251,10 @@ class TaskController extends Controller
             'progress' => $validated['progress'] ?? 0,
             'assigned_to' => $validated['assigned_to'] ?? null,
             'created_by' => $request->user()->id,
-            'position' => Task::where('project_id', $project->id)->max('position') + 1,
+            'position' => Task::where('client_id', $client->id)->max('position') + 1,
         ]);
 
-        $task->load(['project', 'assignee', 'creator']);
+        $task->load(['project', 'assignee', 'creator', 'client']);
 
         return response()->json([
             'message' => 'Task created successfully.',

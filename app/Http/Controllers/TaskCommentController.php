@@ -1,20 +1,20 @@
 <?php
 
-namespace App\Http\Controllers\Portal;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\Task;
 use App\Models\TaskComment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class PortalTaskCommentController extends Controller
+class TaskCommentController extends Controller
 {
     public function index(Request $request, Task $task): JsonResponse
     {
-        $client = $request->client;
+        $user = $request->user();
 
-        if (!$this->taskBelongsToClient($task, $client->id)) {
+        // Check if user belongs to the task's team
+        if ($task->team_id && !$user->teams()->where('teams.id', $task->team_id)->exists()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -30,15 +30,11 @@ class PortalTaskCommentController extends Controller
 
     public function store(Request $request, Task $task): JsonResponse
     {
-        $client = $request->client;
-        $collaborator = $request->collaborator;
+        $user = $request->user();
 
-        if (!$this->taskBelongsToClient($task, $client->id)) {
+        // Check if user belongs to the task's team
+        if ($task->team_id && !$user->teams()->where('teams.id', $task->team_id)->exists()) {
             return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        if (!$this->hasPermission($collaborator, 'comment')) {
-            return response()->json(['message' => 'Permission denied'], 403);
         }
 
         $validated = $request->validate([
@@ -47,9 +43,11 @@ class PortalTaskCommentController extends Controller
 
         $comment = TaskComment::create([
             'task_id' => $task->id,
-            'collaborator_id' => $collaborator->id,
+            'user_id' => $user->id,
             'content' => $validated['content'],
         ]);
+
+        $comment->load('user');
 
         return response()->json([
             'comment' => $this->formatComment($comment),
@@ -58,10 +56,10 @@ class PortalTaskCommentController extends Controller
 
     public function destroy(Request $request, Task $task, TaskComment $comment): JsonResponse
     {
-        $client = $request->client;
-        $collaborator = $request->collaborator;
+        $user = $request->user();
 
-        if (!$this->taskBelongsToClient($task, $client->id)) {
+        // Check if user belongs to the task's team
+        if ($task->team_id && !$user->teams()->where('teams.id', $task->team_id)->exists()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -69,8 +67,11 @@ class PortalTaskCommentController extends Controller
             return response()->json(['message' => 'Comment not found'], 404);
         }
 
-        // Only allow deleting own comments
-        if ($comment->collaborator_id !== $collaborator->id) {
+        // Only allow deleting own comments (or team owner can delete any)
+        $team = $task->team;
+        $isOwner = $team && $team->owner_id === $user->id;
+
+        if ($comment->user_id !== $user->id && !$isOwner) {
             return response()->json(['message' => 'Permission denied'], 403);
         }
 
@@ -79,24 +80,6 @@ class PortalTaskCommentController extends Controller
         return response()->json([
             'message' => 'Comment deleted successfully.',
         ]);
-    }
-
-    protected function hasPermission($collaborator, string $permission): bool
-    {
-        return $collaborator->hasPermission($permission);
-    }
-
-    protected function taskBelongsToClient(Task $task, int $clientId): bool
-    {
-        if ($task->client_id === $clientId) {
-            return true;
-        }
-
-        if ($task->project && $task->project->client_id === $clientId) {
-            return true;
-        }
-
-        return false;
     }
 
     protected function formatComment(TaskComment $comment): array

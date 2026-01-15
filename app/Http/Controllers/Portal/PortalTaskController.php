@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Models\ClientCollaborator;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\Http\JsonResponse;
@@ -13,9 +14,11 @@ class PortalTaskController extends Controller
     public function index(Request $request): JsonResponse
     {
         $client = $request->client;
+        $clientId = $client->id;
 
-        $tasks = Task::whereHas('project', fn ($q) => $q->where('client_id', $client->id))
-            ->with(['assignee', 'project'])
+        $tasks = Task::where('client_id', $clientId)
+            ->orWhereHas('project', fn ($q) => $q->where('client_id', $clientId))
+            ->with(['assignee', 'collaboratorAssignee', 'project'])
             ->orderBy('position')
             ->get();
 
@@ -28,11 +31,11 @@ class PortalTaskController extends Controller
     {
         $client = $request->client;
 
-        if (!$task->project || $task->project->client_id !== $client->id) {
+        if (!$this->taskBelongsToClient($task, $client->id)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $task->load(['assignee', 'project']);
+        $task->load(['assignee', 'collaboratorAssignee', 'project']);
 
         return response()->json([
             'task' => $this->formatTask($task),
@@ -57,27 +60,32 @@ class PortalTaskController extends Controller
             'description' => ['nullable', 'string'],
             'status' => ['sometimes', 'string', 'in:todo,in_progress,review,done'],
             'priority' => ['sometimes', 'string', 'in:low,medium,high,urgent'],
+            'assigned_to' => ['nullable', 'integer'],
             'due_date' => ['nullable', 'date'],
             'progress' => ['sometimes', 'integer', 'min:0', 'max:100'],
-            'is_recurring' => ['sometimes', 'boolean'],
-            'recurrence_rule' => ['nullable', 'string'],
+            'recurrence_rule' => ['nullable', 'string', 'in:daily,weekly,monthly'],
         ]);
+
+        $assigneeData = $this->resolveAssignee($validated['assigned_to'] ?? null, $client->id);
 
         $task = Task::create([
             'team_id' => $project->client->team_id,
             'project_id' => $project->id,
+            'client_id' => $client->id,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'status' => $validated['status'] ?? 'todo',
             'priority' => $validated['priority'] ?? 'medium',
+            'assigned_to' => $assigneeData['assigned_to'],
+            'assignee_type' => $assigneeData['assignee_type'],
             'due_date' => $validated['due_date'] ?? null,
             'progress' => $validated['progress'] ?? 0,
-            'recurrence_rule' => $validated['is_recurring'] ?? false ? $validated['recurrence_rule'] : null,
+            'recurrence_rule' => $validated['recurrence_rule'] ?? null,
             'created_by' => $project->client->team->owner_id,
             'position' => Task::where('project_id', $project->id)->max('position') + 1,
         ]);
 
-        $task->load(['assignee', 'project']);
+        $task->load(['assignee', 'collaboratorAssignee', 'project']);
 
         return response()->json([
             'task' => $this->formatTask($task),
@@ -89,7 +97,7 @@ class PortalTaskController extends Controller
         $client = $request->client;
         $collaborator = $request->collaborator;
 
-        if (!$task->project || $task->project->client_id !== $client->id) {
+        if (!$this->taskBelongsToClient($task, $client->id)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -102,20 +110,22 @@ class PortalTaskController extends Controller
             'description' => ['nullable', 'string'],
             'status' => ['sometimes', 'string', 'in:todo,in_progress,review,done'],
             'priority' => ['sometimes', 'string', 'in:low,medium,high,urgent'],
+            'assigned_to' => ['nullable', 'integer'],
             'due_date' => ['nullable', 'date'],
             'progress' => ['sometimes', 'integer', 'min:0', 'max:100'],
-            'is_recurring' => ['sometimes', 'boolean'],
-            'recurrence_rule' => ['nullable', 'string'],
+            'recurrence_rule' => ['nullable', 'string', 'in:daily,weekly,monthly'],
             'position' => ['sometimes', 'integer', 'min:0'],
         ]);
 
-        if (isset($validated['is_recurring'])) {
-            $validated['recurrence_rule'] = $validated['is_recurring'] ? ($validated['recurrence_rule'] ?? null) : null;
-            unset($validated['is_recurring']);
+        // Handle assigned_to
+        if (array_key_exists('assigned_to', $validated)) {
+            $assigneeData = $this->resolveAssignee($validated['assigned_to'], $client->id);
+            $validated['assigned_to'] = $assigneeData['assigned_to'];
+            $validated['assignee_type'] = $assigneeData['assignee_type'];
         }
 
         $task->update($validated);
-        $task->load(['assignee', 'project']);
+        $task->load(['assignee', 'collaboratorAssignee', 'project']);
 
         return response()->json([
             'task' => $this->formatTask($task),
@@ -127,7 +137,7 @@ class PortalTaskController extends Controller
         $client = $request->client;
         $collaborator = $request->collaborator;
 
-        if (!$task->project || $task->project->client_id !== $client->id) {
+        if (!$this->taskBelongsToClient($task, $client->id)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -142,10 +152,41 @@ class PortalTaskController extends Controller
         ]);
     }
 
+    protected function resolveAssignee(?int $assignedTo, int $clientId): array
+    {
+        if (!$assignedTo) {
+            return ['assigned_to' => null, 'assignee_type' => null];
+        }
+
+        // Check if it's a collaborator of this client
+        $collaborator = ClientCollaborator::where('id', $assignedTo)
+            ->where('client_id', $clientId)
+            ->first();
+
+        if ($collaborator) {
+            return ['assigned_to' => $assignedTo, 'assignee_type' => 'collaborator'];
+        }
+
+        // Otherwise assume it's a user (team member)
+        return ['assigned_to' => $assignedTo, 'assignee_type' => 'user'];
+    }
+
     protected function hasPermission($collaborator, string $permission): bool
     {
-        $permissions = $collaborator->permissions ?? ['view'];
-        return in_array($permission, $permissions);
+        return $collaborator->hasPermission($permission);
+    }
+
+    protected function taskBelongsToClient(Task $task, int $clientId): bool
+    {
+        if ($task->client_id === $clientId) {
+            return true;
+        }
+
+        if ($task->project && $task->project->client_id === $clientId) {
+            return true;
+        }
+
+        return false;
     }
 
     protected function formatTask(Task $task): array
@@ -166,10 +207,7 @@ class PortalTaskController extends Controller
                 'id' => $task->project->id,
                 'name' => $task->project->name,
             ] : null,
-            'assignee' => $task->assignee ? [
-                'id' => $task->assignee->id,
-                'name' => $task->assignee->name,
-            ] : null,
+            'assignee' => $task->assignee_info,
             'created_at' => $task->created_at,
             'updated_at' => $task->updated_at,
         ];

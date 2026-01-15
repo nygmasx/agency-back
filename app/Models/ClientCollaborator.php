@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CollaboratorRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -15,12 +16,15 @@ class ClientCollaborator extends Model
         'name',
         'token',
         'permissions',
+        'access_type',
+        'role',
         'expires_at',
     ];
 
     protected $casts = [
         'permissions' => 'array',
         'expires_at' => 'datetime',
+        'role' => CollaboratorRole::class,
     ];
 
     protected $hidden = [
@@ -53,10 +57,26 @@ class ClientCollaborator extends Model
 
     public function hasPermission(string $permission): bool
     {
-        if ($this->permissions === null) {
-            return true;
-        }
+        return match ($permission) {
+            'view' => $this->role->canView(),
+            'comment' => $this->role->canComment(),
+            'edit' => $this->role->canEdit(),
+            default => false,
+        };
+    }
 
-        return in_array($permission, $this->permissions);
+    public function canView(): bool
+    {
+        return $this->role->canView();
+    }
+
+    public function canComment(): bool
+    {
+        return $this->role->canComment();
+    }
+
+    public function canEdit(): bool
+    {
+        return $this->role->canEdit();
     }
 }

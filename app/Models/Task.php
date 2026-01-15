@@ -17,9 +17,11 @@ class Task extends Model
     protected $fillable = [
         'team_id',
         'project_id',
+        'client_id',
         'title',
         'description',
         'assigned_to',
+        'assignee_type',
         'created_by',
         'status',
         'priority',
@@ -48,9 +50,42 @@ class Task extends Model
         return $this->belongsTo(Project::class);
     }
 
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function collaboratorAssignee(): BelongsTo
+    {
+        return $this->belongsTo(ClientCollaborator::class, 'assigned_to');
+    }
+
+    public function getAssigneeInfoAttribute(): ?array
+    {
+        if (!$this->assigned_to) {
+            return null;
+        }
+
+        if ($this->assignee_type === 'collaborator') {
+            $collaborator = $this->collaboratorAssignee;
+            return $collaborator ? [
+                'id' => $collaborator->id,
+                'name' => $collaborator->name,
+                'type' => 'collaborator',
+            ] : null;
+        }
+
+        $user = $this->assignee;
+        return $user ? [
+            'id' => $user->id,
+            'name' => $user->name,
+            'type' => 'user',
+        ] : null;
     }
 
     public function creator(): BelongsTo

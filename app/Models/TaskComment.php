@@ -32,19 +32,25 @@ class TaskComment extends Model
     public function getAuthorAttribute(): array
     {
         if ($this->user_id) {
-            return [
-                'id' => $this->user->id,
-                'name' => $this->user->name,
-                'type' => 'team',
-            ];
+            $user = $this->user;
+            if ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'type' => 'user',
+                ];
+            }
         }
 
         if ($this->collaborator_id) {
-            return [
-                'id' => $this->collaborator->id,
-                'name' => $this->collaborator->name,
-                'type' => 'collaborator',
-            ];
+            $collaborator = $this->collaborator;
+            if ($collaborator) {
+                return [
+                    'id' => $collaborator->id,
+                    'name' => $collaborator->name,
+                    'type' => 'collaborator',
+                ];
+            }
         }
 
         return [

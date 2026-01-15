@@ -88,8 +88,7 @@ class PortalTaskFileController extends Controller
 
     protected function hasPermission($collaborator, string $permission): bool
     {
-        $permissions = $collaborator->permissions ?? ['view'];
-        return in_array($permission, $permissions);
+        return $collaborator->hasPermission($permission);
     }
 
     protected function formatFile(TaskFile $file): array
