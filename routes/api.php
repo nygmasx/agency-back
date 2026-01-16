@@ -4,9 +4,11 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\ClientCollaboratorController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\Portal\PortalAuthController;
 use App\Http\Controllers\Portal\PortalCollaboratorController;
 use App\Http\Controllers\Portal\PortalConversationController;
+use App\Http\Controllers\Portal\PortalDocumentController;
 use App\Http\Controllers\Portal\PortalFileController;
 use App\Http\Controllers\Portal\PortalMessageController;
 use App\Http\Controllers\Portal\PortalNotificationController;
@@ -106,6 +108,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/clients/{client}/collaborators/{collaborator}', [ClientCollaboratorController::class, 'update']);
     Route::post('/clients/{client}/collaborators/{collaborator}/resend-invitation', [ClientCollaboratorController::class, 'resendInvitation']);
     Route::delete('/clients/{client}/collaborators/{collaborator}', [ClientCollaboratorController::class, 'destroy']);
+
+    // Client Documents
+    Route::get('/clients/{client}/documents', [DocumentController::class, 'index']);
+    Route::post('/clients/{client}/documents', [DocumentController::class, 'store']);
+    Route::get('/clients/{client}/documents/{document}', [DocumentController::class, 'show']);
+    Route::put('/clients/{client}/documents/{document}', [DocumentController::class, 'update']);
+    Route::delete('/clients/{client}/documents/{document}', [DocumentController::class, 'destroy']);
 });
 
 // Client Portal (token-based auth)
@@ -163,5 +172,12 @@ Route::prefix('portal')->group(function () {
         // Collaborators (portal-side management)
         Route::get('/collaborators', [PortalCollaboratorController::class, 'index']);
         Route::post('/collaborators', [PortalCollaboratorController::class, 'store']);
+
+        // Documents
+        Route::get('/documents', [PortalDocumentController::class, 'index']);
+        Route::post('/documents', [PortalDocumentController::class, 'store']);
+        Route::get('/documents/{document}', [PortalDocumentController::class, 'show']);
+        Route::put('/documents/{document}', [PortalDocumentController::class, 'update']);
+        Route::delete('/documents/{document}', [PortalDocumentController::class, 'destroy']);
     });
 });

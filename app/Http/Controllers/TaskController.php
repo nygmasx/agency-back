@@ -203,8 +203,12 @@ class TaskController extends Controller
         $team = $client->team;
         $this->authorize('view', $team);
 
+        // Récupérer TOUTES les tâches du client:
+        // - Tâches directement assignées au client (client_id = X)
+        // - Tâches assignées aux projets du client (project.client_id = X)
         $query = Task::where('client_id', $client->id)
-            ->with(['project', 'assignee', 'creator', 'client']);
+            ->orWhereHas('project', fn ($q) => $q->where('client_id', $client->id))
+            ->with(['project', 'assignee', 'collaboratorAssignee', 'creator', 'client']);
 
         $this->applyFilters($query, $request);
         $this->applySorting($query, $request);
@@ -299,9 +303,9 @@ class TaskController extends Controller
                 $query->orderBy('due_date')->orderBy('priority', 'desc');
                 break;
             default:
-                $sortBy = $request->get('sort_by', 'created_at');
-                $sortDir = $request->get('sort_dir', 'desc');
-                $query->orderBy($sortBy, $sortDir);
+                $sortBy = $request->get('sort_by', 'position');
+                $sortDir = $request->get('sort_dir', 'asc');
+                $query->orderBy($sortBy, $sortDir)->orderBy('created_at', 'desc');
         }
     }
 }
